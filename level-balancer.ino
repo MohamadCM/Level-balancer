@@ -1,22 +1,20 @@
-#include <Wire.h>  // Wire library - used for I2C communication
-#include <Servo.h>  // Servo library
-#include <Arduino_FreeRTOS.h> // Real time OS
+#include  <Wire.h>                    // Wire library - used for I2C communication
+#include  <Servo.h>                   // Servo library
+#include  <Arduino_FreeRTOS.h>        // Real time OS
 
+#define   precision           0.0039 
+#define   calibration_factor  57.0
+#define   servo_pin           9       // Servo's connection pin
+#define   servo_angle         80      // servo's starting position in degrees
+#define   ADXL345             0x53    // The ADXL345 sensor I2C address
+#define   highPriority        1
+#define   lowPriority         0
  
-Servo servo;  
-int servoPin = 9;
-int servoAngle = 80;   // servo's starting position in degrees
-
-int ADXL345 = 0x53; // The ADXL345 sensor I2C address
-
-int x,y,z;
-float xg,yg,zg;
-float soh;
+//Global Variables
+Servo servo; 
 float tilt;
-float angle;
-String dir;
-int highPriority = 1;
-int lowPriority = 0;
+
+//Tasks
 void calculateTilt();
 void rotateServo();
 
@@ -24,8 +22,8 @@ void setup(){
   Serial.begin(9600);
   Serial.print("Angle Meter");  
   Serial.begin(9600);
-  servo.attach(servoPin);
-  Wire.begin(); // Initiate the Wire library
+  servo.attach(servo_pin);
+  Wire.begin(); // Initiate the Wire (I2C) library
   
   // Set ADXL345 in measuring mode
   Wire.beginTransmission(ADXL345); // Start communicating with the device 
@@ -33,7 +31,7 @@ void setup(){
   // Enable measurement
   Wire.write(0x8); // (8dec -> 0000 1000 binary) Bit D3 High for measuring enable 
   Wire.endTransmission();
-  servo.write(servoAngle);
+  servo.write(servo_angle);
   
   xTaskCreate(calculateTilt, 
               "Caculate tilt", 
@@ -55,7 +53,13 @@ void calculateTilt(void * unused){
   while(true){
     vTaskPrioritySet(NULL, //Curent task
                     highPriority); // Task won't be interrupted
-                    
+
+    //Initial Values
+    int     x, y, z;
+    float   xg, yg, zg;
+    float   soh;
+    float   angle;
+    String  dir;
     //Accelerometer stuff   
     Wire.beginTransmission(ADXL345);
     Wire.write(0x32); // Start with register 0x32 (ACCEL_XOUT_H)
@@ -65,12 +69,12 @@ void calculateTilt(void * unused){
     y = ( Wire.read()| Wire.read() << 8); // Y-axis value
     z = ( Wire.read()| Wire.read() << 8); // Z-axis value
     
-    xg = x*0.0039;
-    yg = y*0.0039;
-    zg = z*0.0039;
+    xg = x * precision;
+    yg = y * precision;
+    zg = z * precision;
     soh = yg/zg;
-  
-    tilt = (int)(atan(soh)*57.0);
+    tilt = (int)(atan(soh) * calibration_factor);
+    
     if (abs(tilt) > 90) {
         Serial.print("Tilt:Range Error");
       }
@@ -101,7 +105,7 @@ void rotateServo(void * unused){
                     highPriority); // Task won't be interrupted
                     
      Serial.println("Rotating Servo");
-     servo.write(servoAngle + tilt);
+     servo.write(servo_angle + tilt);
      
      vTaskPrioritySet(NULL, //Curent task
                     lowPriority); // Task can be interrupted
